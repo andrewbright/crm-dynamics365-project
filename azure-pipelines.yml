@@ -1,0 +1,66 @@
+# Bulletproof Project Template build pipeline
+variables:
+  semver: 0.1.3
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+# Build Number
+name: $(semver)$(Rev:.r)
+
+# Should only trigger master branch or PR's
+trigger:
+  - master
+
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+
+  # Build Plugins and Workflow projects
+- task: NuGetCommand@2
+  displayName: 'NuGet restore solution packages'
+  inputs:
+    restoreSolution: '$(solution)'
+
+- task: VSBuild@1
+  displayName: 'Build Plugins and Workflow projects'
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+- task: VSTest@2
+  displayName: 'Test Plugins and Workflow projects'
+  inputs:
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+    codeCoverageEnabled: true
+    runSettingsFile: '.runsettings'
+
+  # Pack CDS solution file
+- task: NuGetCommand@2
+  displayName: 'NuGet restore Solution folder packages'
+  inputs:
+    restoreSolution: 'Solutions/packages.config'
+    restoreDirectory: '../packages'
+
+- task: BatchScript@1
+  displayName: 'Run spkl pack'
+  inputs:
+    filename: 'Solutions/spkl/pack.bat'
+    workingFolder: 'Solutions/spkl'
+
+  # Publish build output
+- task: CopyFiles@2
+  displayName: 'Copy Build Artifacts'
+  inputs:
+    SourceFolder: '$(system.defaultworkingdirectory)'
+    Contents: 'Solutions/*.zip'
+    TargetFolder: '$(build.artifactstagingdirectory)'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Solution Artifacts'
+  inputs:
+    PathtoPublish: '$(build.artifactstagingdirectory)'
+    ArtifactName: Solutions
